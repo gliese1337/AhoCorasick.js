@@ -42,7 +42,7 @@ export function buildFail(
   // add it to the queue and set its fail
   // transition to the root.
   const fail = [0];
-  let queue = Object.values(goto[0]);
+  const queue = Object.values(goto[0]);
   for (const s of queue) { fail[s] = 0; }
   // Compute failure links for states of
   // depth d + 1 from states of depth d.
@@ -72,14 +72,9 @@ export function buildFail(
   }
 
   // collect level-1 states
-  queue = Object.values(goto[0]);
   for (let i = 0; i < queue.length; i++) {
     const r = queue[i];
     const delta = goto[r];
-    
-    // collect level d + 1 states
-    queue.push(...Object.values(delta));
-
     // short-circuit failure links for this level
     for (const [a, s] of Object.entries(goto[fail[r]])) {
       if (!delta.hasOwnProperty(a)) { delta[a] = s; }
