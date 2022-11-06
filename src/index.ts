@@ -50,8 +50,9 @@ export function buildFail(
     // while queue is not empty,
     // let r be the next state in queue
     const r = queue[i];
+    const delta = goto[r];
     // for each `a` leading to a state `s` from `r`
-    for (const [a, s] of Object.entries(goto[r])) {
+    for (const [a, s] of Object.entries(delta)) {
       queue.push(s); // queue <- queue + s
       let f = 0;
       setf: {
@@ -69,12 +70,7 @@ export function buildFail(
         else { output[s].push(...outf); }
       }
     }
-  }
-
-  // collect level-1 states
-  for (let i = 0; i < queue.length; i++) {
-    const r = queue[i];
-    const delta = goto[r];
+    
     // short-circuit failure links for this level
     for (const [a, s] of Object.entries(goto[fail[r]])) {
       if (!delta.hasOwnProperty(a)) { delta[a] = s; }
