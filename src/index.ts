@@ -2,10 +2,8 @@ interface ACMatch {
   start: number;
   end: number;
 }
-
 interface ACAutomaton {
   goto: { [key: string]: number; }[];
-  fail: number[];
   output: { [key: number]: number[] };
 }
 
@@ -37,16 +35,15 @@ export function buildGoto(
 
 export function buildFail(
   goto: { [key: string]: number; }[],
-  fail: number[],
   output: { [key: number]: number[] },
 ) {
 
   // for each state reachable from the root,
   // add it to the queue and set its fail
   // transition to the root.
-  const queue: number[] = Object.values(goto[0]);
+  const fail = [0];
+  let queue = Object.values(goto[0]);
   for (const s of queue) { fail[s] = 0; }
-  fail[0] = 0;
   // Compute failure links for states of
   // depth d + 1 from states of depth d.
   for (let i = 0; i < queue.length; i++) {
@@ -73,14 +70,9 @@ export function buildFail(
       }
     }
   }
-}
 
-export function compressFail(
-  goto: { [key: string]: number; }[],
-  fail: number[],
-) {
   // collect level-1 states
-  const queue = Object.values(goto[0]);
+  queue = Object.values(goto[0]);
   for (let i = 0; i < queue.length; i++) {
     const r = queue[i];
     const delta = goto[r];
@@ -99,29 +91,26 @@ export class AhoCorasick {
 
   private constructor(
     private goto: { [key: string]: number; }[],
-    private fail: number[],
     private output: { [key: number]: number[] },
   ) {}
 
   public static build(needles: string[]) {
-    const ac = new AhoCorasick([], [], {});
+    const ac = new AhoCorasick([], {});
     buildGoto(needles, ac.goto, ac.output);
-    buildFail(ac.goto, ac.fail, ac.output);
-    compressFail(ac.goto, ac.fail);
+    buildFail(ac.goto, ac.output);
     return ac;
   }
   
   public toJSON(): ACAutomaton {
     return {
       goto: this.goto,
-      fail: this.fail,
       output: this.output,
     };
   }
 
   public static load(a: ACAutomaton | string) {
     if (typeof a === 'string') { a = JSON.parse(a) as ACAutomaton; }
-    return new AhoCorasick(a.goto, a.fail, a.output);
+    return new AhoCorasick(a.goto, a.output);
   }
 
   public * search(haystack: string): Generator<ACMatch> {
