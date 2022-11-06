@@ -75,8 +75,7 @@ export function buildFail(
   }
 }
 
-/*
-function compressFail(
+export function compressFail(
   goto: { [key: string]: number; }[],
   fail: number[],
 ) {
@@ -95,7 +94,6 @@ function compressFail(
     }
   }
 }
-*/
 
 export class AhoCorasick {
 
@@ -109,7 +107,7 @@ export class AhoCorasick {
     const ac = new AhoCorasick([], [], {});
     buildGoto(needles, ac.goto, ac.output);
     buildFail(ac.goto, ac.fail, ac.output);
-    //compressFail(ac.goto, ac.fail);
+    compressFail(ac.goto, ac.fail);
     return ac;
   }
   
@@ -127,18 +125,11 @@ export class AhoCorasick {
   }
 
   public * search(haystack: string): Generator<ACMatch> {
-    const { goto, fail, output } = this;
+    const { goto, output } = this;
     let state = 0;
     const len = haystack.length;
-    char_loop: for (let i = 0; i < len; i++) {
-      const a = haystack[i];
-      let ns = goto[state][a];
-      while (ns === undefined) {
-        if (state === 0) { continue char_loop; }
-        state = fail[state];
-        ns = goto[state][a];
-      }
-      state = ns;
+    for (let i = 0; i < len; i++) {
+      state = goto[state][haystack[i]] ?? 0;
       const o = output[state];
       if (o) {
         for (const l of o) {
