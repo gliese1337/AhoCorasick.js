@@ -7,11 +7,14 @@ interface ACAutomaton {
   output: { [key: number]: number[] };
 }
 
-export function buildGoto(
+export function buildAutomaton(
   needles: string[],
   goto: { [key: string]: number; }[],
   output: { [key: number]: number[] },
 ) {
+
+  /* Build the base trie and partial output function. */
+
   let newstate = 0;
   goto[0] = {};
   for (const k of needles) {
@@ -31,21 +34,19 @@ export function buildGoto(
     }
     output[state] = [l];
   }
-}
 
-export function buildFail(
-  goto: { [key: string]: number; }[],
-  output: { [key: number]: number[] },
-) {
+  /*
+    Calculate failure links so we can use them
+    to calculate the complete output function.
+  */
 
   // for each state reachable from the root,
   // add it to the queue and set its fail
   // transition to the root.
-  const fail = [0];
-  const queue = Object.values(goto[0]);
-  for (const s of queue) { fail[s] = 0; }
+  const fail = new Array(goto.length).fill(0);
   // Compute failure links for states of
   // depth d + 1 from states of depth d.
+  const queue = Object.values(goto[0]);
   for (let i = 0; i < queue.length; i++) {
     // while queue is not empty,
     // let r be the next state in queue
@@ -71,7 +72,10 @@ export function buildFail(
       }
     }
     
-    // short-circuit failure links for this level
+    /*
+      Once we have computed outputs for the next level,
+      we can short-circuit failure links for this level.
+    */
     for (const [a, s] of Object.entries(goto[fail[r]])) {
       if (!delta.hasOwnProperty(a)) { delta[a] = s; }
     }
@@ -87,8 +91,7 @@ export class AhoCorasick {
 
   public static build(needles: string[]) {
     const ac = new AhoCorasick([], {});
-    buildGoto(needles, ac.goto, ac.output);
-    buildFail(ac.goto, ac.output);
+    buildAutomaton(needles, ac.goto, ac.output);
     return ac;
   }
   
