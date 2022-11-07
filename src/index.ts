@@ -1,22 +1,27 @@
-interface ACMatch {
+export interface ACMatch {
   start: number;
   end: number;
+  index: number;
 }
-interface ACAutomaton {
+export interface ACAutomaton {
   goto: { [key: string]: number; }[];
-  output: { [key: number]: number[] };
+  output: { [key: number]: [number, number][] };
 }
 
-export function buildAutomaton(
+function buildAutomaton(
   needles: string[],
   goto: { [key: string]: number; }[],
-  output: { [key: number]: number[] },
+  output: { [key: number]: [number,number][] },
 ) {
 
-  /* Build the base trie and partial output function. */
+  /*
+    Build the base trie and partial output function.
+    Aho-Corasick Algorithm 2
+  */
 
   let newstate = 0;
   goto[0] = {};
+  let i = 0;
   for (const k of needles) {
     let state = 0;
     let j = 0;
@@ -32,12 +37,13 @@ export function buildAutomaton(
       state = newstate;
       goto[state] = {};
     }
-    output[state] = [l];
+    output[state] = [[l, i++]];
   }
 
   /*
     Calculate failure links so we can use them
     to calculate the complete output function.
+    Aho-Corasick Algorithms 3 & 4
   */
 
   // for each state reachable from the root,
@@ -86,7 +92,7 @@ export class AhoCorasick {
 
   private constructor(
     private goto: { [key: string]: number; }[],
-    private output: { [key: number]: number[] },
+    private output: { [key: number]: [number, number][] },
   ) {}
 
   public static build(needles: string[]) {
@@ -94,29 +100,39 @@ export class AhoCorasick {
     buildAutomaton(needles, ac.goto, ac.output);
     return ac;
   }
-  
-  public toJSON(): ACAutomaton {
-    return {
-      goto: this.goto,
-      output: this.output,
-    };
-  }
 
   public static load(a: ACAutomaton | string) {
     if (typeof a === 'string') { a = JSON.parse(a) as ACAutomaton; }
     return new AhoCorasick(a.goto, a.output);
   }
 
-  public * search(haystack: string): Generator<ACMatch> {
+  public * search(haystack: string, reuse = false): Generator<ACMatch> {
+    // Aho-Corasick Algorithm 1
     const { goto, output } = this;
     let state = 0;
     const len = haystack.length;
-    for (let i = 0; i < len; i++) {
-      state = goto[state][haystack[i]] ?? 0;
-      const o = output[state];
-      if (o) {
-        for (const l of o) {
-          yield { start: i - l + 1, end: i + 1 };
+    if (reuse) {
+      const out: ACMatch = { start: 0, end: 0, index: 0 };
+      for (let k = 0; k < len; k++) {
+        state = goto[state][haystack[k]] ?? 0;
+        const o = output[state];
+        if (o) {
+          for (const [l, i] of o) {
+            out.start = k - l + 1;
+            out.end = k + 1;
+            out.index = i;
+            yield out;
+          }
+        }
+      }
+    } else {
+      for (let k = 0; k < len; k++) {
+        state = goto[state][haystack[k]] ?? 0;
+        const o = output[state];
+        if (o) {
+          for (const [l, i] of o) {
+            yield { start: k - l + 1, end: k + 1, index: i };
+          }
         }
       }
     }
