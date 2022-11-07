@@ -3,9 +3,16 @@ export interface ACMatch {
   end: number;
   index: number;
 }
-export interface ACAutomaton {
-  goto: { [key: string]: number; }[];
-  output: { [key: number]: [number, number][] };
+
+export type Indexer = string | number;
+export interface Indexable<T extends Indexer> {
+  length: number;
+  [key: number]: T;
+}
+
+export interface ACAutomaton<T extends Indexer> {
+  goto: Record<T, number>[];
+  output: Record<number, [number, number][]>;
 }
 
 export enum ACMode {
@@ -14,10 +21,10 @@ export enum ACMode {
   FINDALL,
 }
 
-function buildAutomaton(
-  needles: string[],
-  goto: { [key: string]: number; }[],
-  output: { [key: number]: [number,number][] },
+function buildAutomaton<T extends Indexer>(
+  needles: Indexable<T>[],
+  goto: Record<T, number>[],
+  output: Record<number, [number, number][]>,
 ) {
 
   /*
@@ -26,7 +33,7 @@ function buildAutomaton(
   */
 
   let newstate = 0;
-  goto[0] = {};
+  goto[0] = {} as Record<T, number>;
   let i = 0;
   for (const k of needles) {
     let state = 0;
@@ -41,7 +48,7 @@ function buildAutomaton(
       newstate++;
       goto[state][k[j]] = newstate;
       state = newstate;
-      goto[state] = {};
+      goto[state] = {} as Record<T, number>;
     }
     output[state] = [[l, i++]];
   }
@@ -58,14 +65,14 @@ function buildAutomaton(
   const fail = new Array(goto.length).fill(0);
   // Compute failure links for states of
   // depth d + 1 from states of depth d.
-  const queue = Object.values(goto[0]);
+  const queue: number[] = Object.values(goto[0]);
   for (let i = 0; i < queue.length; i++) {
     // while queue is not empty,
     // let r be the next state in queue
     const r = queue[i];
     const delta = goto[r];
     // for each `a` leading to a state `s` from `r`
-    for (const [a, s] of Object.entries(delta)) {
+    for (const [a, s] of Object.entries(delta) as Iterable<[T, number]>) {
       queue.push(s); // queue <- queue + s
       let f = 0;
       setf: {
@@ -88,7 +95,7 @@ function buildAutomaton(
       Once we have computed outputs for the next level,
       we can short-circuit failure links for this level.
     */
-    for (const [a, s] of Object.entries(goto[fail[r]])) {
+    for (const [a, s] of Object.entries(goto[fail[r]]) as Iterable<[T, number]>) {
       if (!delta.hasOwnProperty(a)) { delta[a] = s; }
     }
   }
@@ -96,10 +103,10 @@ function buildAutomaton(
 
 /* Three variations on Aho-Corasick Algorithm 1 */
 
-function * search_iter(
-  haystack: string,
-  goto: { [key: string]: number; }[],
-  output: { [key: number]: [number, number][] },
+function * search_iter<T extends Indexer>(
+  haystack: Indexable<T>,
+  goto: Record<T, number>[],
+  output: Record<number, [number, number][]>,
 ): Generator<ACMatch> {
   let state = 0;
   const len = haystack.length;
@@ -114,10 +121,10 @@ function * search_iter(
   }
 }
 
-function * search_reuse(
-  haystack: string,
-  goto: { [key: string]: number; }[],
-  output: { [key: number]: [number, number][] },
+function * search_reuse<T extends Indexer>(
+  haystack: Indexable<T>,
+  goto: Record<T, number>[],
+  output: Record<number, [number, number][]>,
 ): Generator<ACMatch> {
   let state = 0;
   const len = haystack.length;
@@ -136,10 +143,10 @@ function * search_reuse(
   }
 }
 
-function search_findall(
-  haystack: string,
-  goto: { [key: string]: number; }[],
-  output: { [key: number]: [number, number][] },
+function search_findall<T extends Indexer>(
+  haystack: Indexable<T>,
+  goto: Record<T, number>[],
+  output: Record<number, [number, number][]>,
 ): ACMatch[] {
   let state = 0;
   const len = haystack.length;
@@ -156,13 +163,13 @@ function search_findall(
   return out;
 }
 
-const GeneratorConstructor = function* () {}.constructor as new (arg: string, body: string) => (haystack: string) => Generator<ACMatch>;
+const GeneratorConstructor = function* () {}.constructor as new <T extends Indexer>(arg: string, body: string) => (haystack: Indexable<T>) => Generator<ACMatch>;
 
-function compile(
+function compile<T extends Indexer>(
   mode: ACMode,
-  goto: { [key: string]: number; }[],
-  output: { [key: number]: [number, number][] },
-): ((haystack: string) => Generator<ACMatch>) | ((haystack: string) => ACMatch[]) {
+  goto: Record<T, number>[],
+  output: Record<number, [number, number][]>,
+): ((haystack: Indexable<T>) => Generator<ACMatch>) | ((haystack: Indexable<T>) => ACMatch[]) {
   const body = `
   let state = 0;
   const len = haystack.length;
@@ -175,10 +182,10 @@ function compile(
       ${goto.map((transitions,state) => `
       case ${state}:
       switch(haystack[k]) {
-      ${Object.entries(transitions).map(([a,s]) => `
-        case ${a === '"' ? `'"'` : '"'+a+'"'}:
+      ${(Object.entries(transitions) as [T, number][]).map(([a,s]) => `
+        case ${ typeof a === 'number' ? a : a === '"' ? `'"'` : '"'+a+'"' }:
           state = ${s};
-          ${output[s] ? output[s].map(([l,i]) =>
+          ${output[s] ? (output[s] as [number, number][]).map(([l,i]) =>
             mode === ACMode.MREUSE ? `out.start = k - ${l - 1}; out.end = k + 1; out.index = ${i}; yield out;` :
             mode === ACMode.ITERATE ? `yield { start: k - ${l - 1}, end: k + 1, index: ${i} };` :
             `out.push({ start: k - ${l - 1}, end: k + 1, index: ${i} });`
@@ -196,54 +203,54 @@ function compile(
   return new (mode === ACMode.FINDALL ? Function : GeneratorConstructor)("haystack", body) as any;
 }
 
-export class AhoCorasick {
+export class AhoCorasick<T extends Indexer> {
 
   private constructor(
-    private goto: { [key: string]: number; }[],
-    private output: { [key: number]: [number, number][] },
+    private goto: Record<T, number>[],
+    private output: Record<number, [number, number][]>,
   ) {}
 
-  public static build(needles: string[]) {
+  public static build<T extends Indexer>(needles: Indexable<T>[]) {
     const ac = new AhoCorasick([], {});
     buildAutomaton(needles, ac.goto, ac.output);
     return ac;
   }
 
-  public static load(a: ACAutomaton | string) {
-    if (typeof a === 'string') { a = JSON.parse(a) as ACAutomaton; }
+  public static load<T extends Indexer>(a: ACAutomaton<T> | string) {
+    if (typeof a === 'string') { a = JSON.parse(a) as ACAutomaton<T>; }
     return new AhoCorasick(a.goto, a.output);
   }
 
-  public static compile(needles: string[]): (haystack: string) => Generator<ACMatch>
-  public static compile(needles: string[], mode: ACMode.ITERATE | ACMode.MREUSE): (haystack: string) => Generator<ACMatch>
-  public static compile(needles: string[], mode: ACMode.FINDALL): (haystack: string) => ACMatch[]
-  public static compile(needles: string[], mode = ACMode.ITERATE): ((haystack: string) => Generator<ACMatch>) | ((haystack: string) => ACMatch[]) {
-    const goto: { [key: string]: number; }[] = [];
-    const output = {};
+  public static compile<T extends Indexer>(needles: Indexable<T>[]): (haystack: Indexable<T>) => Generator<ACMatch>
+  public static compile<T extends Indexer>(needles: Indexable<T>[], mode: ACMode.ITERATE | ACMode.MREUSE): (haystack: Indexable<T>) => Generator<ACMatch>
+  public static compile<T extends Indexer>(needles: Indexable<T>[], mode: ACMode.FINDALL): (haystack: Indexable<T>) => ACMatch[]
+  public static compile<T extends Indexer>(needles: Indexable<T>[], mode = ACMode.ITERATE): ((haystack: Indexable<T>) => Generator<ACMatch>) | ((haystack: Indexable<T>) => ACMatch[]) {
+    const goto: Record<T, number>[] = [];
+    const output: Record<number, [number, number][]> = {};
     buildAutomaton(needles, goto, output);
     return compile(mode, goto, output);
   }
 
-  public search(haystack: string): Generator<ACMatch>;
-  public search(haystack: string, mode: ACMode.ITERATE | ACMode.MREUSE): Generator<ACMatch>;
-  public search(haystack: string, mode: ACMode.FINDALL): ACMatch[];
-  public search(haystack: string, mode = ACMode.ITERATE): Generator<ACMatch> | ACMatch[] {
+  public search<T extends Indexer>(haystack: Indexable<T>): Generator<ACMatch>;
+  public search<T extends Indexer>(haystack: Indexable<T>, mode: ACMode.ITERATE | ACMode.MREUSE): Generator<ACMatch>;
+  public search<T extends Indexer>(haystack: Indexable<T>, mode: ACMode.FINDALL): ACMatch[];
+  public search<T extends Indexer>(haystack: Indexable<T>, mode = ACMode.ITERATE): Generator<ACMatch> | ACMatch[] {
     switch(mode) {
       default:
-      case ACMode.ITERATE: return search_iter(haystack, this.goto, this.output);
-      case ACMode.MREUSE: return search_reuse(haystack, this.goto, this.output);
-      case ACMode.FINDALL: return search_findall(haystack, this.goto, this.output);
+      case ACMode.ITERATE: return search_iter<T>(haystack, this.goto as any, this.output);
+      case ACMode.MREUSE: return search_reuse<T>(haystack, this.goto as any, this.output);
+      case ACMode.FINDALL: return search_findall<T>(haystack, this.goto as any, this.output);
     }
   }
 
-  public test(haystack: string): boolean {
+  public test(haystack: Indexable<T>): boolean {
     return !this.search(haystack).next().done;
   }
 
-  public compile(): (haystack: string) => Generator<ACMatch>
-  public compile(mode: ACMode.ITERATE | ACMode.MREUSE): (haystack: string) => Generator<ACMatch>
-  public compile(mode: ACMode.FINDALL): (haystack: string) => ACMatch[]
-  public compile(mode = ACMode.ITERATE): ((haystack: string) => Generator<ACMatch>) | ((haystack: string) => ACMatch[]) {
-    return compile(mode, this.goto, this.output);
+  public compile<T extends Indexer>(): (haystack: Indexable<T>) => Generator<ACMatch>
+  public compile<T extends Indexer>(mode: ACMode.ITERATE | ACMode.MREUSE): (haystack: Indexable<T>) => Generator<ACMatch>
+  public compile<T extends Indexer>(mode: ACMode.FINDALL): (haystack: Indexable<T>) => ACMatch[]
+  public compile<T extends Indexer>(mode = ACMode.ITERATE): ((haystack: Indexable<T>) => Generator<ACMatch>) | ((haystack: Indexable<T>) => ACMatch[]) {
+    return compile<T>(mode, this.goto as any, this.output);
   }
 }

@@ -22,23 +22,21 @@ API
 
 The primary export is the `AhoCorasick` class, which has a private constructor but exposes three static builder methods:
 
-* `static build(needles: string[]): AhoCorasick` - Takes in an array of needles to build a new automaton.
-* `static load(a: ACAutomaton | string): AhoCorasick` - Takes in a JS object conforming to the `ACAutomaton` interface, or a JSON string which will deserialize to such, and reconstitutes an `AhoCorasick` instance from it.
-* `static compile(needles: string[], mode = ACMode.ITERATE): (haystack: string) => (Generator<ACMatch> | ACMatch[])` - Takes in an array of needles and an option search mode and returns a compiled JS `Function` or `GeneratorFunction` which implements the automaton.
+* `static build<T>(needles: Indexable<T>[]): AhoCorasick<T>` - Takes in an array of needles to build a new automaton.
+* `static load<T>(a: ACAutomaton<T> | string): AhoCorasick<T>` - Takes in a JS object conforming to the `ACAutomaton` interface, or a JSON string which will deserialize to such, and reconstitutes an `AhoCorasick` instance from it.
+* `static compile<T>(needles: Indexable<T>[], mode = ACMode.ITERATE): (haystack: Indexable<T>) => (Generator<ACMatch> | ACMatch[])` - Takes in an array of needles and an option search mode and returns a compiled JS `Function` or `GeneratorFunction` which implements the automaton.
+
+Note that `Indexable<T>` is an interface covering anything with a `length` property and numeric keys mapping to values of type `T`, where `T` may be `string` or `number`. Thus, this library works equally well on native `string` values, as well as arrays of strings and arrays of numbers--including `TypedArray`s.
 
 The `ACAutomaton` interface is as follows:
 
 ```ts
-export interface ACAutomaton {
+export interface ACAutomaton<T> {
     // an array of objects which map input characters to new states
-    goto: {
-        [key: string]: number;
-    }[];
+    goto: Record<T, number>[];
     // an object which maps machine states to outputs for those states,
     // where each potential output is a pair of a needle length and needle index
-    output: {
-        [key: number]: [number, number][];
-    };
+    output: Record<number, [number, number][]>;
 }
 ```
 
@@ -54,6 +52,6 @@ The `mode` argument (which also appears on instance methods) has an `ACMode` enu
 
 `AhoCorasick` instance methods are as follows:
 
-* `search(haystack: string, mode = ACMode.ITERATE): Generator<ACMatch> | ACMatch[]` Executes the automaton to find matches in a haystack.
-* `test(haystack: string): boolean` Determines whether or not a haystack contains any matches, without actually returning them.
-* `compile(mode = ACMode.ITERATE): (haystack: string) => Generator<ACMatch> | ACMatch[]` Compiles the automaton into a native JS `Function` or `GeneratorFunction`. 
+* `search(haystack: Indexable<T>, mode = ACMode.ITERATE): Generator<ACMatch> | ACMatch[]` Executes the automaton to find matches in a haystack.
+* `test(haystack: Indexable<T>): boolean` Determines whether or not a haystack contains any matches, without actually returning them.
+* `compile(mode = ACMode.ITERATE): (haystack: Indexable<T>) => Generator<ACMatch> | ACMatch[]` Compiles the automaton into a native JS `Function` or `GeneratorFunction`. 
