@@ -1,6 +1,6 @@
 import 'mocha';
 import { expect } from 'chai';
-import { AhoCorasick } from '../src';
+import { ACMode, AhoCorasick } from '../src';
 
 describe("Paper-derived tests", () => {
   /*it(`Build machine for {he, she, his, hers}`, () => {
@@ -30,7 +30,7 @@ describe("Paper-derived tests", () => {
 
   it(`Should find all matches in "ushers"`, () => {
     const ac = AhoCorasick.build(["he","she","his","hers"]);
-    const results = ac.findall("ushers");
+    const results = ac.search("ushers", ACMode.FINDALL);
     expect(results).eqls([{start:1,end:4,index:1},{start:2,end:4,index:0},{start:2,end:6,index:3}]);
   });
 
@@ -86,14 +86,14 @@ describe("Paper-derived tests", () => {
 
   it(`Should find all matches with compiled automaton`, () => {
     const ac = AhoCorasick.build(["he","she","his","hers"]);
-    const g = ac.compile_findall();
+    const g = ac.compile(ACMode.FINDALL);
     const results = g("ushers");
     expect(results).eqls([{start:1,end:4,index:1},{start:2,end:4,index:0},{start:2,end:6,index:3}]);
   });
 
   it(`Should re-use memory`, () => {
     const ac = AhoCorasick.build(["he","she","his","hers"]);
-    const iter = ac.search("ushers", true);
+    const iter = ac.search("ushers", ACMode.MREUSE);
     const results = [iter.next().value];
     expect(results[0]).eqls({start:1,end:4,index:1});
     results.push(iter.next().value);
@@ -106,7 +106,7 @@ describe("Paper-derived tests", () => {
 
   it(`Should re-use memory with compiled automaton`, () => {
     const ac = AhoCorasick.build(["he","she","his","hers"]);
-    const iter = ac.compile(true)("ushers");
+    const iter = ac.compile(ACMode.MREUSE)("ushers");
     const results = [iter.next().value];
     expect(results[0]).eqls({start:1,end:4,index:1});
     results.push(iter.next().value);

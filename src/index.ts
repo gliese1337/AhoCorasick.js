@@ -8,6 +8,12 @@ export interface ACAutomaton {
   output: { [key: number]: [number, number][] };
 }
 
+export enum ACMode {
+  ITERATE,
+  MREUSE,
+  FINDALL,
+}
+
 function buildAutomaton(
   needles: string[],
   goto: { [key: string]: number; }[],
@@ -88,7 +94,107 @@ function buildAutomaton(
   }
 }
 
+/* Three variations on Aho-Corasick Algorithm 1 */
+
+function * search_iter(
+  haystack: string,
+  goto: { [key: string]: number; }[],
+  output: { [key: number]: [number, number][] },
+): Generator<ACMatch> {
+  let state = 0;
+  const len = haystack.length;
+  for (let k = 0; k < len; k++) {
+    state = goto[state][haystack[k]] ?? 0;
+    const o = output[state];
+    if (o) {
+      for (const [l, i] of o) {
+        yield { start: k - l + 1, end: k + 1, index: i };
+      }
+    }
+  }
+}
+
+function * search_reuse(
+  haystack: string,
+  goto: { [key: string]: number; }[],
+  output: { [key: number]: [number, number][] },
+): Generator<ACMatch> {
+  let state = 0;
+  const len = haystack.length;
+  const out: ACMatch = { start: 0, end: 0, index: 0 };
+  for (let k = 0; k < len; k++) {
+    state = goto[state][haystack[k]] ?? 0;
+    const o = output[state];
+    if (o) {
+      for (const [l, i] of o) {
+        out.start = k - l + 1;
+        out.end = k + 1;
+        out.index = i;
+        yield out;
+      }
+    }
+  }
+}
+
+function search_findall(
+  haystack: string,
+  goto: { [key: string]: number; }[],
+  output: { [key: number]: [number, number][] },
+): ACMatch[] {
+  let state = 0;
+  const len = haystack.length;
+  const out: ACMatch[] = [];
+  for (let k = 0; k < len; k++) {
+    state = goto[state][haystack[k]] ?? 0;
+    const o = output[state];
+    if (o) {
+      for (const [l, i] of o) {
+        out.push({ start: k - l + 1, end: k + 1, index: i });
+      }
+    }
+  }
+  return out;
+}
+
 const GeneratorConstructor = function* () {}.constructor as new (arg: string, body: string) => (haystack: string) => Generator<ACMatch>;
+
+function compile(
+  mode: ACMode,
+  goto: { [key: string]: number; }[],
+  output: { [key: number]: [number, number][] },
+): ((haystack: string) => Generator<ACMatch>) | ((haystack: string) => ACMatch[]) {
+  const body = `
+  let state = 0;
+  const len = haystack.length;
+  ${
+    mode === ACMode.MREUSE ? 'const out = {};' :
+    mode === ACMode.FINDALL ? 'const out = [];' : ''
+  }
+  for (let k = 0; k < len; k++) {
+    switch(state) {
+      ${goto.map((transitions,state) => `
+      case ${state}:
+      switch(haystack[k]) {
+      ${Object.entries(transitions).map(([a,s]) => `
+        case ${a === '"' ? `'"'` : '"'+a+'"'}:
+          state = ${s};
+          ${output[s] ? output[s].map(([l,i]) =>
+            mode === ACMode.MREUSE ? `out.start = k - ${l - 1}; out.end = k + 1; out.index = ${i}; yield out;` :
+            mode === ACMode.ITERATE ? `yield { start: k - ${l - 1}, end: k + 1, index: ${i} };` :
+            `out.push({ start: k - ${l - 1}, end: k + 1, index: ${i} });`
+          ).join('\n') : ''}
+          continue;`
+      ).join('\n')}
+      }`).join('\n')}
+        
+      default:
+        state = 0;
+        continue;
+    }
+  }
+  ${ mode === ACMode.FINDALL ? 'return out;' : '' }`;
+  return new (mode === ACMode.FINDALL ? Function : GeneratorConstructor)("haystack", body) as any;
+}
 
 export class AhoCorasick {
 
@@ -108,116 +214,36 @@ export class AhoCorasick {
     return new AhoCorasick(a.goto, a.output);
   }
 
-  public * search(haystack: string, reuse = false): Generator<ACMatch> {
-    // Aho-Corasick Algorithm 1
-    const { goto, output } = this;
-    let state = 0;
-    const len = haystack.length;
-    if (reuse) {
-      const out: ACMatch = { start: 0, end: 0, index: 0 };
-      for (let k = 0; k < len; k++) {
-        state = goto[state][haystack[k]] ?? 0;
-        const o = output[state];
-        if (o) {
-          for (const [l, i] of o) {
-            out.start = k - l + 1;
-            out.end = k + 1;
-            out.index = i;
-            yield out;
-          }
-        }
-      }
-    } else {
-      for (let k = 0; k < len; k++) {
-        state = goto[state][haystack[k]] ?? 0;
-        const o = output[state];
-        if (o) {
-          for (const [l, i] of o) {
-            yield { start: k - l + 1, end: k + 1, index: i };
-          }
-        }
-      }
-    }
+  public static compile(needles: string[]): (haystack: string) => Generator<ACMatch>
+  public static compile(needles: string[], mode: ACMode.ITERATE | ACMode.MREUSE): (haystack: string) => Generator<ACMatch>
+  public static compile(needles: string[], mode: ACMode.FINDALL): (haystack: string) => ACMatch[]
+  public static compile(needles: string[], mode = ACMode.ITERATE): ((haystack: string) => Generator<ACMatch>) | ((haystack: string) => ACMatch[]) {
+    const goto: { [key: string]: number; }[] = [];
+    const output = {};
+    buildAutomaton(needles, goto, output);
+    return compile(mode, goto, output);
   }
 
-  public findall(haystack: string): ACMatch[] {
-    // Aho-Corasick Algorithm 1
-    const { goto, output } = this;
-    let state = 0;
-    const len = haystack.length;
-    const out: ACMatch[] = [];
-    for (let k = 0; k < len; k++) {
-      state = goto[state][haystack[k]] ?? 0;
-      const o = output[state];
-      if (o) {
-        for (const [l, i] of o) {
-          out.push({ start: k - l + 1, end: k + 1, index: i });
-        }
-      }
+  public search(haystack: string): Generator<ACMatch>;
+  public search(haystack: string, mode: ACMode.ITERATE | ACMode.MREUSE): Generator<ACMatch>;
+  public search(haystack: string, mode: ACMode.FINDALL): ACMatch[];
+  public search(haystack: string, mode = ACMode.ITERATE): Generator<ACMatch> | ACMatch[] {
+    switch(mode) {
+      default:
+      case ACMode.ITERATE: return search_iter(haystack, this.goto, this.output);
+      case ACMode.MREUSE: return search_reuse(haystack, this.goto, this.output);
+      case ACMode.FINDALL: return search_findall(haystack, this.goto, this.output);
     }
-    return out;
   }
 
   public test(haystack: string): boolean {
     return !this.search(haystack).next().done;
   }
 
-  public compile(reuse=false): (haystack: string) => Generator<ACMatch> {
-    const body = `
-    let state = 0;
-    const len = haystack.length;
-    ${ reuse ? 'const out = {};' : ''}
-    for (let k = 0; k < len; k++) {
-      switch(state) {
-        ${this.goto.map((transitions,state) => `
-        case ${state}:
-        switch(haystack[k]) {
-        ${Object.entries(transitions).map(([a,s]) => `
-          case ${a === '"' ? `'"'` : '"'+a+'"'}:
-            state = ${s};
-            ${this.output[s] ? this.output[s].map(([l,i]) =>
-              reuse ?
-                `out.start = k - ${l - 1}; out.end = k + 1; out.index = ${i}; yield out;` :
-                `yield { start: k - ${l - 1}, end: k + 1, index: ${i} };`
-            ).join('\n') : ''}
-            continue;`
-        ).join('\n')}
-        }`).join('\n')}
-          
-        default:
-          state = 0;
-          continue;
-      }
-    }`;
-    return new GeneratorConstructor("haystack", body);
-  }
-
-  public compile_findall(): (haystack: string) => ACMatch[] {
-    const body = `
-    let state = 0;
-    const out = [];
-    const len = haystack.length;
-    for (let k = 0; k < len; k++) {
-      switch(state) {
-        ${this.goto.map((transitions,state) => `
-        case ${state}:
-        switch(haystack[k]) {
-        ${Object.entries(transitions).map(([a,s]) => `
-          case ${a === '"' ? `'"'` : '"'+a+'"'}:
-            state = ${s};
-            ${this.output[s] ? this.output[s].map(([l,i]) =>
-                `out.push({ start: k - ${l - 1}, end: k + 1, index: ${i} });`
-            ).join('\n') : ''}
-            continue;`
-        ).join('\n')}
-        }`).join('\n')}
-          
-        default:
-          state = 0;
-          continue;
-      }
-    }
-    return out;`;
-    return new Function("haystack", body) as any;
+  public compile(): (haystack: string) => Generator<ACMatch>
+  public compile(mode: ACMode.ITERATE | ACMode.MREUSE): (haystack: string) => Generator<ACMatch>
+  public compile(mode: ACMode.FINDALL): (haystack: string) => ACMatch[]
+  public compile(mode = ACMode.ITERATE): ((haystack: string) => Generator<ACMatch>) | ((haystack: string) => ACMatch[]) {
+    return compile(mode, this.goto, this.output);
   }
 }
