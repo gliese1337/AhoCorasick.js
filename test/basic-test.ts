@@ -28,6 +28,12 @@ describe("Paper-derived tests", () => {
     expect(results).eqls([{start:1,end:4,index:1},{start:2,end:4,index:0},{start:2,end:6,index:3}]);
   });
 
+  it(`Should find all matches in "ushers"`, () => {
+    const ac = AhoCorasick.build(["he","she","his","hers"]);
+    const results = ac.findall("ushers");
+    expect(results).eqls([{start:1,end:4,index:1},{start:2,end:4,index:0},{start:2,end:6,index:3}]);
+  });
+
   it(`Should work with any input order`, () => {
     const orders = [
       ["he","she","his","hers"],
@@ -75,6 +81,13 @@ describe("Paper-derived tests", () => {
     const ac = AhoCorasick.build(["he","she","his","hers"]);
     const g = ac.compile();
     const results = [...g("ushers")];
+    expect(results).eqls([{start:1,end:4,index:1},{start:2,end:4,index:0},{start:2,end:6,index:3}]);
+  });
+
+  it(`Should find all matches with compiled automaton`, () => {
+    const ac = AhoCorasick.build(["he","she","his","hers"]);
+    const g = ac.compile_findall();
+    const results = g("ushers");
     expect(results).eqls([{start:1,end:4,index:1},{start:2,end:4,index:0},{start:2,end:6,index:3}]);
   });
 

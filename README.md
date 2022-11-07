@@ -44,5 +44,7 @@ interface ACAutomaton {
 `AhoCorasick` instance methods are as follows:
 
 * `search(haystack: string, reuse = false): Generator<ACMatch>` Takes a haystack and returns a `Generator` that iterates over all matches. If `reuse` is set to `true`, it will yield the same `ACMatch` object with mutated fields for every match per haystack, which saves on memory allocation.
+* `findall(haystack: string): ACMatch[]` Takes a haystack and returns an array containing all matches. This has higher latency to the first result than using `search`, and cannot share memory for `ACMatch` objects, but avoids the total time and memory overhead of using the `Iterator` protocol.
 * `test(haystack: string): boolean` Determines whether or not a haystack contains any matches, without actually returning them.
-* `compile(reuse = false): (haystack: string) => Generator<ACMatch>` Compiles the automaton into a native JS generator function. If `reuse` is set to `true`, the generator will yield the same `ACMatch` object for every match per haystack, which saves on memory allocation. 
+* `compile(reuse = false): (haystack: string) => Generator<ACMatch>` Compiles the automaton into a native JS `GeneratorFunction`. If `reuse` is set to `true`, the generator will yield the same `ACMatch` object for every match per haystack, which saves on memory allocation. 
+* `compile_findall(): (haystack: string) => ACMatch[]` Compiles the automaton into a native JS `Function` object which will return an array of all matches for a given haystack. This has higher latency to the first result than using `compile`, and cannot share memory for `ACMatch` objects, but avoids the total time and memory overhead of using the `Iterator` protocol.

@@ -140,6 +140,24 @@ export class AhoCorasick {
     }
   }
 
+  public findall(haystack: string): ACMatch[] {
+    // Aho-Corasick Algorithm 1
+    const { goto, output } = this;
+    let state = 0;
+    const len = haystack.length;
+    const out: ACMatch[] = [];
+    for (let k = 0; k < len; k++) {
+      state = goto[state][haystack[k]] ?? 0;
+      const o = output[state];
+      if (o) {
+        for (const [l, i] of o) {
+          out.push({ start: k - l + 1, end: k + 1, index: i });
+        }
+      }
+    }
+    return out;
+  }
+
   public test(haystack: string): boolean {
     return !this.search(haystack).next().done;
   }
@@ -172,5 +190,34 @@ export class AhoCorasick {
       }
     }`;
     return new GeneratorConstructor("haystack", body);
+  }
+
+  public compile_findall(): (haystack: string) => ACMatch[] {
+    const body = `
+    let state = 0;
+    const out = [];
+    const len = haystack.length;
+    for (let k = 0; k < len; k++) {
+      switch(state) {
+        ${this.goto.map((transitions,state) => `
+        case ${state}:
+        switch(haystack[k]) {
+        ${Object.entries(transitions).map(([a,s]) => `
+          case ${a === '"' ? `'"'` : '"'+a+'"'}:
+            state = ${s};
+            ${this.output[s] ? this.output[s].map(([l,i]) =>
+                `out.push({ start: k - ${l - 1}, end: k + 1, index: ${i} });`
+            ).join('\n') : ''}
+            continue;`
+        ).join('\n')}
+        }`).join('\n')}
+          
+        default:
+          state = 0;
+          continue;
+      }
+    }
+    return out;`;
+    return new Function("haystack", body) as any;
   }
 }
