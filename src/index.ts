@@ -88,6 +88,8 @@ function buildAutomaton(
   }
 }
 
+const GeneratorConstructor = function* () {}.constructor as new (arg: string, body: string) => (haystack: string) => Generator<ACMatch>;
+
 export class AhoCorasick {
 
   private constructor(
@@ -140,5 +142,35 @@ export class AhoCorasick {
 
   public test(haystack: string): boolean {
     return !this.search(haystack).next().done;
+  }
+
+  public compile(reuse=false): (haystack: string) => Generator<ACMatch> {
+    const body = `
+    let state = 0;
+    const len = haystack.length;
+    ${ reuse ? 'const out = {};' : ''}
+    for (let k = 0; k < len; k++) {
+      switch(state) {
+        ${this.goto.map((transitions,state) => `
+        case ${state}:
+        switch(haystack[k]) {
+        ${Object.entries(transitions).map(([a,s]) => `
+          case ${a === '"' ? `'"'` : '"'+a+'"'}:
+            state = ${s};
+            ${this.output[s] ? this.output[s].map(([l,i]) =>
+              reuse ?
+                `out.start = k - ${l - 1}; out.end = k + 1; out.index = ${i}; yield out;` :
+                `yield { start: k - ${l - 1}, end: k + 1, index: ${i} };`
+            ).join('\n') : ''}
+            continue;`
+        ).join('\n')}
+        }`).join('\n')}
+          
+        default:
+          state = 0;
+          continue;
+      }
+    }`;
+    return new GeneratorConstructor("haystack", body);
   }
 }

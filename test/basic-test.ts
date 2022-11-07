@@ -71,9 +71,29 @@ describe("Paper-derived tests", () => {
     expect(results).eqls([{start:1,end:4,index:1},{start:2,end:4,index:0},{start:2,end:6,index:3}]);
   });
 
+  it(`Should work with compiled automaton`, () => {
+    const ac = AhoCorasick.build(["he","she","his","hers"]);
+    const g = ac.compile();
+    const results = [...g("ushers")];
+    expect(results).eqls([{start:1,end:4,index:1},{start:2,end:4,index:0},{start:2,end:6,index:3}]);
+  });
+
   it(`Should re-use memory`, () => {
     const ac = AhoCorasick.build(["he","she","his","hers"]);
     const iter = ac.search("ushers", true);
+    const results = [iter.next().value];
+    expect(results[0]).eqls({start:1,end:4,index:1});
+    results.push(iter.next().value);
+    expect(results[1]).eqls({start:2,end:4,index:0});
+    results.push(iter.next().value);
+    expect(results[2]).eqls({start:2,end:6,index:3});
+    expect(results[0]).eqls(results[1]);
+    expect(results[0]).eqls(results[2]);
+  });
+
+  it(`Should re-use memory with compiled automaton`, () => {
+    const ac = AhoCorasick.build(["he","she","his","hers"]);
+    const iter = ac.compile(true)("ushers");
     const results = [iter.next().value];
     expect(results[0]).eqls({start:1,end:4,index:1});
     results.push(iter.next().value);
